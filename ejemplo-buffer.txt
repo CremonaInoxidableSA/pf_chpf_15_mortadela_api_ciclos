@@ -1,0 +1,66 @@
+{
+    "inicioCiclo": "2026-03-19T15:36:48.924289",
+    "finCiclo": "2026-03-19T15:36:52.695775",
+    "recetaBuffer1": 0,
+    "torreBuffer1": 0
+    "Nivel1": {
+        "cancelaciones": [],
+        "finalizado": false,
+        "tiempoNivel": 0
+    },
+    "Nivel2": {
+        "cancelaciones": [],
+        "finalizado": false,
+        "tiempoNivel": 0
+    },
+    "Nivel3": {
+        "cancelaciones": [],
+        "finalizado": false,
+        "tiempoNivel": 0
+    },
+    "Nivel4": {
+        "cancelaciones": [],
+        "finalizado": false,
+        "tiempoNivel": 0
+    },
+    "Nivel5": {
+        "cancelaciones": [],
+        "finalizado": false,
+        "tiempoNivel": 0
+    },
+    "Nivel6": {
+        "cancelaciones": [],
+        "finalizado": false,
+        "tiempoNivel": 0
+    },
+    "Nivel7": {
+        "cancelaciones": [],
+        "finalizado": false,
+        "tiempoNivel": 0
+    },
+    "Nivel8": {
+        "cancelaciones": [],
+        "finalizado": false,
+        "tiempoNivel": 0
+    },
+    "Nivel9": {
+        "cancelaciones": [],
+        "finalizado": false,
+        "tiempoNivel": 0
+    },
+    "Nivel10": {
+        "cancelaciones": [],
+        "finalizado": false,
+        "tiempoNivel": 0
+    },
+    "Nivel11": {
+        "cancelaciones": [],
+        "finalizado": false,
+        "tiempoNivel": 0
+    },
+    "Nivel12": {
+        "cancelaciones": [],
+        "finalizado": false,
+        "tiempoNivel": 0
+    }
+}
