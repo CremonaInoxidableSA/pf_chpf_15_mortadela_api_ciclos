@@ -1,26 +1,11 @@
 from fastapi import APIRouter, HTTPException, Query
 
 from services.ciclosService import listarCiclos, obtenerCiclo, listarCancelaciones
-from services.opcClient import obtener_datos_ciclo
 
 RouterCiclos = APIRouter(
     prefix="/ciclos",
     tags=["Ciclos"],
 )
-
-
-# ─────────────────────────────────────────────────────────────
-#  GET  /ciclos/datos-opc-ciclos
-# ─────────────────────────────────────────────────────────────
-
-@RouterCiclos.get("/datos-opc-ciclos", summary="Datos de ciclos en tiempo real (OPC)")
-async def get_datos_opc_ciclos():
-    """
-    Retorna los últimos valores de ciclos recibidos
-    desde la API OPC vía WebSocket.
-    """
-    datos = await obtener_datos_ciclo()
-    return {"ciclos": datos}
 
 
 # ─────────────────────────────────────────────────────────────

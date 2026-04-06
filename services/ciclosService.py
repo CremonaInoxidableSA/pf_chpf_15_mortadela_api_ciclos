@@ -3,8 +3,11 @@ from __future__ import annotations
 from contextlib import contextmanager
 from datetime import datetime
 from fastapi import HTTPException
+import logging
 
 from services.db import get_connection
+
+logger = logging.getLogger("ciclos_service")
 
 @contextmanager
 def _get_cursor():
@@ -37,132 +40,189 @@ def _serializar_fechas(row: dict) -> dict:
 
 
 # ─────────────────────────────────────────────────────────────
-#  Verificación de duplicados
+#  Procesamiento de buffer desde WebSocket
 # ─────────────────────────────────────────────────────────────
 
-def ciclo_ya_existe(fecha_inicio: str | None) -> bool:
-    """Retorna True si ya existe un ciclo con esa fecha_inicio."""
-    if not fecha_inicio:
-        return False
-    with _get_cursor() as (_, cursor):
-        cursor.execute(
-            "SELECT 1 FROM ciclos WHERE fecha_inicio = %s LIMIT 1",
-            (fecha_inicio,),
-        )
-        return cursor.fetchone() is not None
-
-
-# ─────────────────────────────────────────────────────────────
-#  Guardar ciclo (INSERT) + niveles
-# ─────────────────────────────────────────────────────────────
-
-def _mapear_buffer(data: dict) -> dict:
+def _extraer_niveles_del_buffer(buffer: dict) -> dict:
     """
-    Transforma el buffer OPC al formato esperado por la BD.
-
-    Buffer OPC:
-        inicioCiclo, finCiclo, recetaBuffer1, torreBuffer1,
-        Nivel1 .. Nivel12  (cada Nivel es un dict con campos del nivel)
-
-    Resultado:
-        { fecha_inicio, fecha_fin, id_receta, id_torre, ..., niveles: [...] }
-    """
-    id_receta = data.get("recetaBuffer1")
-    id_torre = data.get("torreBuffer1")
-
-    mapped = {
-        "fecha_inicio": data.get("inicioCiclo"),
-        "fecha_fin":    data.get("finCiclo"),
-        "estado":       data.get("estado"),
-        "id_receta":    id_receta if id_receta else None,
-        "id_torre":     id_torre if id_torre else None,
-        "id_equipo":    data.get("id_equipo"),
-        "tiempo_total": data.get("tiempo_total"),
-        "tiempo_pausa": data.get("tiempo_pausa"),
-        "tiempo_ciclo": data.get("tiempo_ciclo"),
+    Extrae Nivel1..Nivel12 del buffer y retorna dict con info de cada uno.
+    Especifico para el nuevo formato del cliente OPC.
+    
+    Buffer esperado:
+    {
+        "recetaBuffer1": 1,
+        "torreBuffer1": 0,
+        "Nivel1": {"cancelaciones": [...], "finalizado": bool, "tiempoNivel": int, "seleccionado": bool},
+        ...
     }
-
-    niveles = []
+    """
+    niveles = {}
     for i in range(1, 13):
         key = f"Nivel{i}"
-        if key in data:
-            val = data[key]
-            if isinstance(val, dict):
-                # cancelaciones es un array de ids; tomar el primero o None
-                cancelaciones = val.get("cancelaciones", [])
-                id_cancelacion = cancelaciones[0] if cancelaciones else None
-
-                niveles.append({
-                    "nivel":            i,
-                    "finalizado":       1 if val.get("finalizado") else 0,
-                    "tiempo_nivel":     val.get("tiempoNivel"),
-                    "id_cancelaciones": id_cancelacion,
-                })
-
-    mapped["niveles"] = niveles
-    return mapped
+        if key in buffer and isinstance(buffer[key], dict):
+            niveles[i] = buffer[key]
+    return niveles
 
 
-def guardarCiclo(data: dict) -> dict:
+def _calcular_estado(niveles_dict: dict) -> int:
     """
-    Recibe el buffer OPC crudo, lo mapea y lo almacena en la BD.
-    Retorna el ciclo guardado con sus niveles.
+    Calcula el estado basándose en los niveles seleccionados.
+    
+    Estado 1: Todos los niveles seleccionados tienen finalizado=true 
+              y NINGÚN cancelaciones tiene datos.
+    Estado 2: Todos los niveles seleccionados tienen finalizado=true 
+              y AL MENOS UN cancelaciones tiene datos.
+    Estado 3: Al menos un nivel seleccionado tiene finalizado=false.
     """
-    # Mapear buffer OPC → formato BD
-    mapped = _mapear_buffer(data)
-    niveles = mapped.pop("niveles", [])
+    niveles_seleccionados = [
+        n for n in niveles_dict.values() 
+        if isinstance(n, dict) and n.get("seleccionado", False)
+    ]
+    
+    if not niveles_seleccionados:
+        return 3
+    
+    # Verificar si algún nivel seleccionado NO está finalizado
+    for nivel in niveles_seleccionados:
+        if not nivel.get("finalizado", False):
+            return 3
+    
+    # Todos están finalizados, verificar cancelaciones
+    hay_cancelaciones = any(
+        bool(n.get("cancelaciones", []))
+        for n in niveles_seleccionados
+    )
+    
+    return 2 if hay_cancelaciones else 1
 
-    with _get_cursor() as (_, cursor):
 
+def _calcular_tiempo_total(niveles_dict: dict) -> int:
+    """Suma todos los tiempoNivel."""
+    total = 0
+    for nivel in niveles_dict.values():
+        if isinstance(nivel, dict):
+            total += nivel.get("tiempoNivel", 0)
+    return total
+
+
+def procesar_buffer_ciclo(buffer: dict, buffer_name: str = "buffer1") -> dict:
+    """
+    Procesa un buffer recibido desde WebSocket.
+    
+    1. Busca un ciclo activo con mismo id_receta e id_torre
+    2. Si existe: actualiza con datos del buffer
+    3. Si no existe: crea uno nuevo
+    4. Guarda los niveles
+    
+    Retorna {"ciclo": {...}, "niveles": [...]}
+    """
+    # Determinar qué campos usar según el buffer
+    if buffer_name == "buffer2":
+        receta_key = "recetaBuffer2"
+        torre_key = "torreBuffer2"
+    else:
+        receta_key = "recetaBuffer1"
+        torre_key = "torreBuffer1"
+    
+    id_receta = buffer.get(receta_key)
+    id_torre = buffer.get(torre_key)
+    
+    if id_receta is None or id_torre is None:
+        logger.error("Buffer %s inválido: falta %s o %s", buffer_name, receta_key, torre_key)
+        return {}
+    
+    # Extraer niveles del buffer
+    niveles_dict = _extraer_niveles_del_buffer(buffer)
+    
+    # Calcular valores para la BD
+    tiempo_total = _calcular_tiempo_total(niveles_dict)
+    estado = _calcular_estado(niveles_dict)
+    
+    with _get_cursor() as (conn, cursor):
+        # Buscar ciclo activo en la misma transacción
         cursor.execute(
             """
-            INSERT INTO ciclos
-                (fecha_inicio, fecha_fin, estado, id_receta,
-                 id_torre, id_equipo, tiempo_total, tiempo_pausa, tiempo_ciclo)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            SELECT * FROM ciclos 
+            WHERE activo = true AND id_receta = %s AND id_torre = %s
+            LIMIT 1
             """,
-            (
-                mapped.get("fecha_inicio"),
-                mapped.get("fecha_fin"),
-                mapped.get("estado"),
-                mapped.get("id_receta"),
-                mapped.get("id_torre"),
-                mapped.get("id_equipo"),
-                mapped.get("tiempo_total"),
-                mapped.get("tiempo_pausa"),
-                mapped.get("tiempo_ciclo"),
-            ),
+            (id_receta, id_torre)
         )
-        id_ciclo = cursor.lastrowid
-
-        # ── Guardar niveles ──
-        for nivel_data in niveles:
+        ciclo_activo = cursor.fetchone()
+        
+        if ciclo_activo:
+            # Actualizar ciclo existente
+            id_ciclo = ciclo_activo["id_ciclo"]
+            logger.info("Actualizando ciclo activo id=%s", id_ciclo)
+            
             cursor.execute(
                 """
-                INSERT INTO nivelesciclos
-                    (id_ciclo, nivel, finalizado, tiempo_nivel, id_cancelaciones)
-                VALUES (%s, %s, %s, %s, %s)
+                UPDATE ciclos 
+                SET id_estado = %s, tiempo_total = %s, activo = false
+                WHERE id_ciclo = %s
                 """,
-                (
-                    id_ciclo,
-                    nivel_data.get("nivel"),
-                    nivel_data.get("finalizado"),
-                    nivel_data.get("tiempo_nivel"),
-                    nivel_data.get("id_cancelaciones"),
-                ),
+                (estado, tiempo_total, id_ciclo)
             )
-
-        # ── Leer registro guardado ──
+        else:
+            # Crear ciclo nuevo
+            logger.info(
+                "Creando ciclo nuevo para receta=%s, torre=%s",
+                id_receta, id_torre
+            )
+            
+            cursor.execute(
+                """
+                INSERT INTO ciclos 
+                (fecha_inicio, fecha_fin, id_estado, id_receta, 
+                 id_torre, tiempo_total, activo)
+                VALUES (NULL, NULL, %s, %s, %s, %s, false)
+                """,
+                (estado, id_receta, id_torre, tiempo_total)
+            )
+            id_ciclo = cursor.lastrowid
+        
+        # Guardar niveles
+        for num_nivel, nivel_data in sorted(niveles_dict.items()):
+            if isinstance(nivel_data, dict):
+                # Primero, eliminar niveles existentes para este ciclo
+                cursor.execute(
+                    "DELETE FROM nivelesciclos WHERE id_ciclo = %s AND nivel = %s",
+                    (id_ciclo, num_nivel)
+                )
+                
+                # Luego, insertar el nuevo
+                cancelaciones = nivel_data.get("cancelaciones", [])
+                id_cancelaciones = cancelaciones[0] if cancelaciones else None
+                
+                cursor.execute(
+                    """
+                    INSERT INTO nivelesciclos 
+                    (id_ciclo, nivel, finalizado, tiempo_nivel, id_cancelaciones, seleccionado)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    """,
+                    (
+                        id_ciclo,
+                        num_nivel,
+                        1 if nivel_data.get("finalizado", False) else 0,
+                        nivel_data.get("tiempoNivel", 0),
+                        id_cancelaciones,
+                        1 if nivel_data.get("seleccionado", False) else 0
+                    )
+                )
+        
+        conn.commit()
+        
+        # Leer y retornar el ciclo actualizado
         cursor.execute("SELECT * FROM ciclos WHERE id_ciclo = %s", (id_ciclo,))
         ciclo = _serializar_fechas(cursor.fetchone())
-
+        
         cursor.execute(
             "SELECT * FROM nivelesciclos WHERE id_ciclo = %s ORDER BY nivel",
-            (id_ciclo,),
+            (id_ciclo,)
         )
-        niveles_guardados = cursor.fetchall()
-
-    return {"ciclo": ciclo, "niveles": niveles_guardados}
+        niveles = cursor.fetchall()
+    
+    return {"ciclo": ciclo, "niveles": niveles}
 
 
 # ─────────────────────────────────────────────────────────────
