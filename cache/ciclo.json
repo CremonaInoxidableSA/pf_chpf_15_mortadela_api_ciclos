@@ -1,0 +1,76 @@
+{
+  "recetaBuffer2": 2,
+  "torreBuffer2": 2,
+  "Nivel1": {
+    "cancelaciones": [],
+    "finalizado": false,
+    "tiempoNivel": 0,
+    "seleccionado": true
+  },
+  "Nivel2": {
+    "cancelaciones": [],
+    "finalizado": false,
+    "tiempoNivel": 0,
+    "seleccionado": true
+  },
+  "Nivel3": {
+    "cancelaciones": [],
+    "finalizado": false,
+    "tiempoNivel": 0,
+    "seleccionado": true
+  },
+  "Nivel4": {
+    "cancelaciones": [],
+    "finalizado": false,
+    "tiempoNivel": 0,
+    "seleccionado": true
+  },
+  "Nivel5": {
+    "cancelaciones": [],
+    "finalizado": false,
+    "tiempoNivel": 0,
+    "seleccionado": true
+  },
+  "Nivel6": {
+    "cancelaciones": [],
+    "finalizado": false,
+    "tiempoNivel": 0,
+    "seleccionado": true
+  },
+  "Nivel7": {
+    "cancelaciones": [],
+    "finalizado": false,
+    "tiempoNivel": 0,
+    "seleccionado": true
+  },
+  "Nivel8": {
+    "cancelaciones": [],
+    "finalizado": false,
+    "tiempoNivel": 0,
+    "seleccionado": true
+  },
+  "Nivel9": {
+    "cancelaciones": [],
+    "finalizado": false,
+    "tiempoNivel": 0,
+    "seleccionado": true
+  },
+  "Nivel10": {
+    "cancelaciones": [],
+    "finalizado": false,
+    "tiempoNivel": 0,
+    "seleccionado": true
+  },
+  "Nivel11": {
+    "cancelaciones": [],
+    "finalizado": false,
+    "tiempoNivel": 0,
+    "seleccionado": true
+  },
+  "Nivel12": {
+    "cancelaciones": [],
+    "finalizado": false,
+    "tiempoNivel": 0,
+    "seleccionado": true
+  }
+}
