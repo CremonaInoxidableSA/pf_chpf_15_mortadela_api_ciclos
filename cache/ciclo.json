@@ -1,9 +1,10 @@
 {
-  "recetaBuffer2": 2,
-  "torreBuffer2": 2,
+  "recetaBuffer1": 1,
+  "rackBuffer1": 1,
+  "pausaBuffer1": 0,
   "Nivel1": {
     "cancelaciones": [],
-    "finalizado": false,
+    "finalizado": true,
     "tiempoNivel": 0,
     "seleccionado": true
   },
@@ -57,7 +58,7 @@
   },
   "Nivel10": {
     "cancelaciones": [],
-    "finalizado": false,
+    "finalizado": true,
     "tiempoNivel": 0,
     "seleccionado": true
   },
@@ -68,6 +69,12 @@
     "seleccionado": true
   },
   "Nivel12": {
+    "cancelaciones": [],
+    "finalizado": false,
+    "tiempoNivel": 0,
+    "seleccionado": true
+  },
+  "Nivel13": {
     "cancelaciones": [],
     "finalizado": false,
     "tiempoNivel": 0,

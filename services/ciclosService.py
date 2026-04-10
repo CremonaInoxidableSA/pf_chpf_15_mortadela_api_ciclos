@@ -45,23 +45,57 @@ def _serializar_fechas(row: dict) -> dict:
 
 def _extraer_niveles_del_buffer(buffer: dict) -> dict:
     """
-    Extrae Nivel1..Nivel12 del buffer y retorna dict con info de cada uno.
+    Extrae Nivel1..Nivel13 del buffer y retorna dict con info de cada uno.
     Especifico para el nuevo formato del cliente OPC.
     
     Buffer esperado:
     {
         "recetaBuffer1": 1,
-        "torreBuffer1": 0,
+        "rackBuffer1": 0,
+        "pausaBuffer1": 5,
         "Nivel1": {"cancelaciones": [...], "finalizado": bool, "tiempoNivel": int, "seleccionado": bool},
         ...
     }
     """
     niveles = {}
-    for i in range(1, 13):
+    for i in range(1, 14):
         key = f"Nivel{i}"
         if key in buffer and isinstance(buffer[key], dict):
             niveles[i] = buffer[key]
     return niveles
+
+
+def _extraer_tiempo_pausa_del_buffer(buffer: dict, buffer_name: str = "buffer1") -> int:
+    """Retorna el valor de pausa del buffer (pausaBuffer1 o pausaBuffer2)."""
+    key = "pausaBuffer2" if buffer_name == "buffer2" else "pausaBuffer1"
+    value = buffer.get(key)
+    if value is None:
+        return 0
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        logger.warning("Valor de %s inválido en buffer %s: %r", key, buffer_name, value)
+        return 0
+
+
+def _obtener_datos_receta(cursor, id_receta: int) -> dict:
+    """Retorna los campos requeridos de la receta asociada al id_receta."""
+    cursor.execute(
+        "SELECT peso_producto, productos_fila, productos_columna FROM recetas WHERE id_receta = %s",
+        (id_receta,)
+    )
+    receta = cursor.fetchone()
+    return receta or {}
+
+
+def _calcular_peso_procesado(niveles_dict: dict, peso_producto: float, productos_fila: int, productos_columna: int) -> float:
+    """Calcula peso_procesado como niveles finalizados * peso_producto * (productos_fila * productos_columna)."""
+    niveles_finalizados = sum(
+        1 for nivel in niveles_dict.values()
+        if isinstance(nivel, dict) and nivel.get("finalizado", False)
+    )
+    total_productos = productos_fila * productos_columna
+    return niveles_finalizados * peso_producto * total_productos
 
 
 def _calcular_estado(niveles_dict: dict) -> int:
@@ -109,7 +143,7 @@ def procesar_buffer_ciclo(buffer: dict, buffer_name: str = "buffer1") -> dict:
     """
     Procesa un buffer recibido desde WebSocket.
     
-    1. Busca un ciclo activo con mismo id_receta e id_torre
+    1. Busca un ciclo activo con mismo id_receta e id_rack
     2. Si existe: actualiza con datos del buffer
     3. Si no existe: crea uno nuevo
     4. Guarda los niveles
@@ -119,34 +153,49 @@ def procesar_buffer_ciclo(buffer: dict, buffer_name: str = "buffer1") -> dict:
     # Determinar qué campos usar según el buffer
     if buffer_name == "buffer2":
         receta_key = "recetaBuffer2"
-        torre_key = "torreBuffer2"
+        rack_key = "rackBuffer2"
     else:
         receta_key = "recetaBuffer1"
-        torre_key = "torreBuffer1"
+        rack_key = "rackBuffer1"
     
     id_receta = buffer.get(receta_key)
-    id_torre = buffer.get(torre_key)
+    id_rack = buffer.get(rack_key)
     
-    if id_receta is None or id_torre is None:
-        logger.error("Buffer %s inválido: falta %s o %s", buffer_name, receta_key, torre_key)
+    if id_receta is None or id_rack is None:
+        logger.error("Buffer %s inválido: falta %s o %s", buffer_name, receta_key, rack_key)
         return {}
     
-    # Extraer niveles del buffer
-    niveles_dict = _extraer_niveles_del_buffer(buffer)
-    
-    # Calcular valores para la BD
-    tiempo_total = _calcular_tiempo_total(niveles_dict)
-    estado = _calcular_estado(niveles_dict)
-    
     with _get_cursor() as (conn, cursor):
+        receta = _obtener_datos_receta(cursor, id_receta)
+        if not receta:
+            logger.error("Receta %s no encontrada para buffer %s", id_receta, buffer_name)
+            return {}
+
+        peso_producto = receta.get("peso_producto", 0)
+        productos_fila = receta.get("productos_fila", 0)
+        productos_columna = receta.get("productos_columna", 0)
+
+        # Extraer niveles del buffer
+        niveles_dict = _extraer_niveles_del_buffer(buffer)
+        
+        # Calcular valores para la BD
+        tiempo_total = _calcular_tiempo_total(niveles_dict)
+        tiempo_pausa = _extraer_tiempo_pausa_del_buffer(buffer, buffer_name)
+        peso_procesado = _calcular_peso_procesado(
+            niveles_dict,
+            peso_producto,
+            productos_fila,
+            productos_columna,
+        )
+        estado = _calcular_estado(niveles_dict)
         # Buscar ciclo activo en la misma transacción
         cursor.execute(
             """
             SELECT * FROM ciclos 
-            WHERE activo = true AND id_receta = %s AND id_torre = %s
+            WHERE activo = true AND id_receta = %s AND id_rack = %s
             LIMIT 1
             """,
-            (id_receta, id_torre)
+            (id_receta, id_rack)
         )
         ciclo_activo = cursor.fetchone()
         
@@ -158,26 +207,26 @@ def procesar_buffer_ciclo(buffer: dict, buffer_name: str = "buffer1") -> dict:
             cursor.execute(
                 """
                 UPDATE ciclos 
-                SET id_estado = %s, tiempo_total = %s, activo = false
+                SET id_estado = %s, tiempo_total = %s, tiempo_pausa = %s, peso_procesado = %s, activo = false
                 WHERE id_ciclo = %s
                 """,
-                (estado, tiempo_total, id_ciclo)
+                (estado, tiempo_total, tiempo_pausa, peso_procesado, id_ciclo)
             )
         else:
             # Crear ciclo nuevo
             logger.info(
-                "Creando ciclo nuevo para receta=%s, torre=%s",
-                id_receta, id_torre
+                "Creando ciclo nuevo para receta=%s, rack=%s",
+                id_receta, id_rack
             )
             
             cursor.execute(
                 """
                 INSERT INTO ciclos 
                 (fecha_inicio, fecha_fin, id_estado, id_receta, 
-                 id_torre, tiempo_total, activo)
-                VALUES (NULL, NULL, %s, %s, %s, %s, false)
+                 id_rack, tiempo_total, tiempo_pausa, peso_procesado, activo)
+                VALUES (NULL, NULL, %s, %s, %s, %s, %s, %s, false)
                 """,
-                (estado, id_receta, id_torre, tiempo_total)
+                (estado, id_receta, id_rack, tiempo_total, tiempo_pausa, peso_procesado)
             )
             id_ciclo = cursor.lastrowid
         
@@ -197,7 +246,7 @@ def procesar_buffer_ciclo(buffer: dict, buffer_name: str = "buffer1") -> dict:
                 cursor.execute(
                     """
                     INSERT INTO nivelesciclos 
-                    (id_ciclo, nivel, finalizado, tiempo_nivel, id_cancelaciones, seleccionado)
+                    (id_ciclo, nivel, finalizado, tiempo_nivel, cancelaciones, seleccionado)
                     VALUES (%s, %s, %s, %s, %s, %s)
                     """,
                     (
