@@ -1,11 +1,15 @@
 {
   "recetaBuffer1": 1,
   "rackBuffer1": 1,
-  "pausaBuffer1": 0,
+  "pausaBuffer1": 50,
   "Nivel1": {
-    "cancelaciones": [],
+    "cancelaciones": [
+      1,
+      2,
+      3
+    ],
     "finalizado": true,
-    "tiempoNivel": 0,
+    "tiempoNivel": 90,
     "seleccionado": true
   },
   "Nivel2": {
@@ -58,7 +62,7 @@
   },
   "Nivel10": {
     "cancelaciones": [],
-    "finalizado": true,
+    "finalizado": false,
     "tiempoNivel": 0,
     "seleccionado": true
   },
@@ -79,5 +83,6 @@
     "finalizado": false,
     "tiempoNivel": 0,
     "seleccionado": true
-  }
+  },
+  "numeroEquipo": 1
 }

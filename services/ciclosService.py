@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from contextlib import contextmanager
 from datetime import datetime
 from fastapi import HTTPException
@@ -76,6 +77,18 @@ def _extraer_tiempo_pausa_del_buffer(buffer: dict, buffer_name: str = "buffer1")
     except (TypeError, ValueError):
         logger.warning("Valor de %s inválido en buffer %s: %r", key, buffer_name, value)
         return 0
+
+
+def _extraer_numero_equipo_del_buffer(buffer: dict) -> int | None:
+    """Retorna el número de equipo del buffer o None si no está presente."""
+    value = buffer.get("numeroEquipo")
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        logger.warning("Valor de numeroEquipo inválido en buffer: %r", value)
+        return None
 
 
 def _obtener_datos_receta(cursor, id_receta: int) -> dict:
@@ -181,6 +194,7 @@ def procesar_buffer_ciclo(buffer: dict, buffer_name: str = "buffer1") -> dict:
         # Calcular valores para la BD
         tiempo_total = _calcular_tiempo_total(niveles_dict)
         tiempo_pausa = _extraer_tiempo_pausa_del_buffer(buffer, buffer_name)
+        id_equipo = _extraer_numero_equipo_del_buffer(buffer)
         peso_procesado = _calcular_peso_procesado(
             niveles_dict,
             peso_producto,
@@ -207,10 +221,10 @@ def procesar_buffer_ciclo(buffer: dict, buffer_name: str = "buffer1") -> dict:
             cursor.execute(
                 """
                 UPDATE ciclos 
-                SET id_estado = %s, tiempo_total = %s, tiempo_pausa = %s, peso_procesado = %s, activo = false
+                SET id_estado = %s, tiempo_total = %s, tiempo_pausa = %s, id_equipo = %s, peso_procesado = %s, activo = false
                 WHERE id_ciclo = %s
                 """,
-                (estado, tiempo_total, tiempo_pausa, peso_procesado, id_ciclo)
+                (estado, tiempo_total, tiempo_pausa, id_equipo, peso_procesado, id_ciclo)
             )
         else:
             # Crear ciclo nuevo
@@ -223,10 +237,10 @@ def procesar_buffer_ciclo(buffer: dict, buffer_name: str = "buffer1") -> dict:
                 """
                 INSERT INTO ciclos 
                 (fecha_inicio, fecha_fin, id_estado, id_receta, 
-                 id_rack, tiempo_total, tiempo_pausa, peso_procesado, activo)
-                VALUES (NULL, NULL, %s, %s, %s, %s, %s, %s, false)
+                 id_rack, id_equipo, tiempo_total, tiempo_pausa, peso_procesado, activo)
+                VALUES (NULL, NULL, %s, %s, %s, %s, %s, %s, %s, false)
                 """,
-                (estado, id_receta, id_rack, tiempo_total, tiempo_pausa, peso_procesado)
+                (estado, id_receta, id_rack, id_equipo, tiempo_total, tiempo_pausa, peso_procesado)
             )
             id_ciclo = cursor.lastrowid
         
@@ -241,7 +255,7 @@ def procesar_buffer_ciclo(buffer: dict, buffer_name: str = "buffer1") -> dict:
                 
                 # Luego, insertar el nuevo
                 cancelaciones = nivel_data.get("cancelaciones", [])
-                id_cancelaciones = cancelaciones[0] if cancelaciones else None
+                cancelaciones_json = json.dumps(cancelaciones) if cancelaciones else None
                 
                 cursor.execute(
                     """
@@ -254,7 +268,7 @@ def procesar_buffer_ciclo(buffer: dict, buffer_name: str = "buffer1") -> dict:
                         num_nivel,
                         1 if nivel_data.get("finalizado", False) else 0,
                         nivel_data.get("tiempoNivel", 0),
-                        id_cancelaciones,
+                        cancelaciones_json,
                         1 if nivel_data.get("seleccionado", False) else 0
                     )
                 )
