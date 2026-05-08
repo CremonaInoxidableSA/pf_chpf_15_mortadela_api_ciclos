@@ -1,36 +1,33 @@
 {
-  "recetaBuffer1": 3,
-  "rackBuffer1": 3,
+  "recetaBuffer1": 1,
+  "rackBuffer1": 1,
   "Nivel1": {
-    "cancelaciones": [
-      1,
-      3
-    ],
+    "cancelaciones": [],
     "finalizado": false,
-    "tiempoNivel": 1,
+    "tiempoNivel": 0,
     "seleccionado": true
   },
   "Nivel2": {
     "cancelaciones": [],
-    "finalizado": true,
-    "tiempoNivel": 2,
+    "finalizado": false,
+    "tiempoNivel": 0,
     "seleccionado": true
   },
   "Nivel3": {
     "cancelaciones": [],
-    "finalizado": true,
-    "tiempoNivel": 3,
+    "finalizado": false,
+    "tiempoNivel": 0,
     "seleccionado": true
   },
   "Nivel4": {
     "cancelaciones": [],
-    "finalizado": true,
-    "tiempoNivel": 4,
+    "finalizado": false,
+    "tiempoNivel": 0,
     "seleccionado": true
   },
   "Nivel5": {
     "cancelaciones": [],
-    "finalizado": true,
+    "finalizado": false,
     "tiempoNivel": 0,
     "seleccionado": true
   },
@@ -38,49 +35,49 @@
     "cancelaciones": [],
     "finalizado": false,
     "tiempoNivel": 0,
-    "seleccionado": false
+    "seleccionado": true
   },
   "Nivel7": {
     "cancelaciones": [],
     "finalizado": false,
     "tiempoNivel": 0,
-    "seleccionado": false
+    "seleccionado": true
   },
   "Nivel8": {
     "cancelaciones": [],
     "finalizado": false,
     "tiempoNivel": 0,
-    "seleccionado": false
+    "seleccionado": true
   },
   "Nivel9": {
     "cancelaciones": [],
     "finalizado": false,
     "tiempoNivel": 0,
-    "seleccionado": false
+    "seleccionado": true
   },
   "Nivel10": {
     "cancelaciones": [],
     "finalizado": false,
     "tiempoNivel": 0,
-    "seleccionado": false
+    "seleccionado": true
   },
   "Nivel11": {
     "cancelaciones": [],
     "finalizado": false,
     "tiempoNivel": 0,
-    "seleccionado": false
+    "seleccionado": true
   },
   "Nivel12": {
     "cancelaciones": [],
     "finalizado": false,
     "tiempoNivel": 0,
-    "seleccionado": false
+    "seleccionado": true
   },
   "Nivel13": {
     "cancelaciones": [],
     "finalizado": false,
     "tiempoNivel": 0,
-    "seleccionado": false
+    "seleccionado": true
   },
   "numeroEquipo": 1
 }
