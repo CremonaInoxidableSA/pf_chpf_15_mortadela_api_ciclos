@@ -1,38 +1,36 @@
 {
-  "recetaBuffer1": 1,
-  "rackBuffer1": 1,
-  "pausaBuffer1": 50,
+  "recetaBuffer1": 3,
+  "rackBuffer1": 3,
   "Nivel1": {
     "cancelaciones": [
       1,
-      2,
       3
     ],
-    "finalizado": true,
-    "tiempoNivel": 90,
+    "finalizado": false,
+    "tiempoNivel": 1,
     "seleccionado": true
   },
   "Nivel2": {
     "cancelaciones": [],
-    "finalizado": false,
-    "tiempoNivel": 0,
+    "finalizado": true,
+    "tiempoNivel": 2,
     "seleccionado": true
   },
   "Nivel3": {
     "cancelaciones": [],
-    "finalizado": false,
-    "tiempoNivel": 0,
+    "finalizado": true,
+    "tiempoNivel": 3,
     "seleccionado": true
   },
   "Nivel4": {
     "cancelaciones": [],
-    "finalizado": false,
-    "tiempoNivel": 0,
+    "finalizado": true,
+    "tiempoNivel": 4,
     "seleccionado": true
   },
   "Nivel5": {
     "cancelaciones": [],
-    "finalizado": false,
+    "finalizado": true,
     "tiempoNivel": 0,
     "seleccionado": true
   },
@@ -40,49 +38,49 @@
     "cancelaciones": [],
     "finalizado": false,
     "tiempoNivel": 0,
-    "seleccionado": true
+    "seleccionado": false
   },
   "Nivel7": {
     "cancelaciones": [],
     "finalizado": false,
     "tiempoNivel": 0,
-    "seleccionado": true
+    "seleccionado": false
   },
   "Nivel8": {
     "cancelaciones": [],
     "finalizado": false,
     "tiempoNivel": 0,
-    "seleccionado": true
+    "seleccionado": false
   },
   "Nivel9": {
     "cancelaciones": [],
     "finalizado": false,
     "tiempoNivel": 0,
-    "seleccionado": true
+    "seleccionado": false
   },
   "Nivel10": {
     "cancelaciones": [],
     "finalizado": false,
     "tiempoNivel": 0,
-    "seleccionado": true
+    "seleccionado": false
   },
   "Nivel11": {
     "cancelaciones": [],
     "finalizado": false,
     "tiempoNivel": 0,
-    "seleccionado": true
+    "seleccionado": false
   },
   "Nivel12": {
     "cancelaciones": [],
     "finalizado": false,
     "tiempoNivel": 0,
-    "seleccionado": true
+    "seleccionado": false
   },
   "Nivel13": {
     "cancelaciones": [],
     "finalizado": false,
     "tiempoNivel": 0,
-    "seleccionado": true
+    "seleccionado": false
   },
   "numeroEquipo": 1
 }

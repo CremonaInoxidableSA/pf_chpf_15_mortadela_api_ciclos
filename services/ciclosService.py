@@ -66,19 +66,6 @@ def _extraer_niveles_del_buffer(buffer: dict) -> dict:
     return niveles
 
 
-def _extraer_tiempo_pausa_del_buffer(buffer: dict, buffer_name: str = "buffer1") -> int:
-    """Retorna el valor de pausa del buffer (pausaBuffer1 o pausaBuffer2)."""
-    key = "pausaBuffer2" if buffer_name == "buffer2" else "pausaBuffer1"
-    value = buffer.get(key)
-    if value is None:
-        return 0
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        logger.warning("Valor de %s inválido en buffer %s: %r", key, buffer_name, value)
-        return 0
-
-
 def _extraer_numero_equipo_del_buffer(buffer: dict) -> int | None:
     """Retorna el número de equipo del buffer o None si no está presente."""
     value = buffer.get("numeroEquipo")
@@ -113,43 +100,55 @@ def _calcular_peso_procesado(niveles_dict: dict, peso_producto: float, productos
 
 def _calcular_estado(niveles_dict: dict) -> int:
     """
-    Calcula el estado basándose en los niveles seleccionados.
-    
-    Estado 1: Todos los niveles seleccionados tienen finalizado=true 
-              y NINGÚN cancelaciones tiene datos.
-    Estado 2: Todos los niveles seleccionados tienen finalizado=true 
-              y AL MENOS UN cancelaciones tiene datos.
-    Estado 3: Al menos un nivel seleccionado tiene finalizado=false.
+    Calcula el estado del ciclo basándose en el estado_nivel de los niveles seleccionados.
+
+    Estado 1 (FINALIZADO):                    todos los niveles seleccionados son "FINALIZADO".
+    Estado 2 (FINALIZADO CON CANCELACIONES):  todos son "FINALIZADO" o "FINALIZADO CON CANCELACIONES",
+                                              pero al menos uno es "FINALIZADO CON CANCELACIONES".
+    Estado 3 (CANCELADO):                     al menos un nivel seleccionado es "CANCELADO" o "NO PROCESADO".
     """
-    niveles_seleccionados = [
-        n for n in niveles_dict.values() 
+    estados = [
+        _calcular_estado_nivel(n)
+        for n in niveles_dict.values()
         if isinstance(n, dict) and n.get("seleccionado", False)
     ]
-    
-    if not niveles_seleccionados:
-        return 3
-    
-    # Verificar si algún nivel seleccionado NO está finalizado
-    for nivel in niveles_seleccionados:
-        if not nivel.get("finalizado", False):
-            return 3
-    
-    # Todos están finalizados, verificar cancelaciones
-    hay_cancelaciones = any(
-        bool(n.get("cancelaciones", []))
-        for n in niveles_seleccionados
-    )
-    
-    return 2 if hay_cancelaciones else 1
+
+    if not estados:
+        return "CANCELADO"
+
+    if any(e in ("CANCELADO", "NO PROCESADO") for e in estados):
+        return "CANCELADO"
+
+    if any(e == "FINALIZADO CON CANCELACIONES" for e in estados):
+        return "FINALIZADO CON CANCELACIONES"
+
+    return "FINALIZADO"
 
 
-def _calcular_tiempo_total(niveles_dict: dict) -> int:
-    """Suma todos los tiempoNivel."""
-    total = 0
-    for nivel in niveles_dict.values():
-        if isinstance(nivel, dict):
-            total += nivel.get("tiempoNivel", 0)
-    return total
+def _calcular_estado_nivel(nivel_data: dict) -> str:
+    """
+    Calcula el estado de un nivel individual.
+
+    NO SELECCIONADO:            seleccionado=false
+    CANCELADO:                  seleccionado=true, finalizado=false, cancelaciones!=[]
+    FINALIZADO CON CANCELACIONES: seleccionado=true, finalizado=true,  cancelaciones!=[]
+    FINALIZADO:                 seleccionado=true, finalizado=true,  cancelaciones==[]
+    NO PROCESADO:               seleccionado=true, finalizado=false, cancelaciones==[]
+    """
+    seleccionado = nivel_data.get("seleccionado", False)
+    if not seleccionado:
+        return "NO SELECCIONADO"
+
+    finalizado = nivel_data.get("finalizado", False)
+    hay_cancelaciones = bool(nivel_data.get("cancelaciones", []))
+
+    if finalizado and hay_cancelaciones:
+        return "FINALIZADO CON CANCELACIONES"
+    if finalizado and not hay_cancelaciones:
+        return "FINALIZADO"
+    if not finalizado and hay_cancelaciones:
+        return "CANCELADO"
+    return "NO PROCESADO"
 
 
 def procesar_buffer_ciclo(buffer: dict, buffer_name: str = "buffer1") -> dict:
@@ -192,8 +191,6 @@ def procesar_buffer_ciclo(buffer: dict, buffer_name: str = "buffer1") -> dict:
         niveles_dict = _extraer_niveles_del_buffer(buffer)
         
         # Calcular valores para la BD
-        tiempo_total = _calcular_tiempo_total(niveles_dict)
-        tiempo_pausa = _extraer_tiempo_pausa_del_buffer(buffer, buffer_name)
         id_equipo = _extraer_numero_equipo_del_buffer(buffer)
         peso_procesado = _calcular_peso_procesado(
             niveles_dict,
@@ -221,10 +218,10 @@ def procesar_buffer_ciclo(buffer: dict, buffer_name: str = "buffer1") -> dict:
             cursor.execute(
                 """
                 UPDATE ciclos 
-                SET id_estado = %s, tiempo_total = %s, tiempo_pausa = %s, id_equipo = %s, peso_procesado = %s, activo = false
+                SET estado_ciclo = %s, id_equipo = %s, peso_procesado = %s, activo = false
                 WHERE id_ciclo = %s
                 """,
-                (estado, tiempo_total, tiempo_pausa, id_equipo, peso_procesado, id_ciclo)
+                (estado, id_equipo, peso_procesado, id_ciclo)
             )
         else:
             # Crear ciclo nuevo
@@ -236,11 +233,11 @@ def procesar_buffer_ciclo(buffer: dict, buffer_name: str = "buffer1") -> dict:
             cursor.execute(
                 """
                 INSERT INTO ciclos 
-                (fecha_inicio, fecha_fin, id_estado, id_receta, 
-                 id_rack, id_equipo, tiempo_total, tiempo_pausa, peso_procesado, activo)
-                VALUES (NULL, NULL, %s, %s, %s, %s, %s, %s, %s, false)
+                (fecha_inicio, fecha_fin, estado_ciclo, id_receta, 
+                 id_rack, id_equipo, peso_procesado, activo)
+                VALUES (NULL, NULL, %s, %s, %s, %s, %s, false)
                 """,
-                (estado, id_receta, id_rack, id_equipo, tiempo_total, tiempo_pausa, peso_procesado)
+                (estado, id_receta, id_rack, id_equipo, peso_procesado)
             )
             id_ciclo = cursor.lastrowid
         
@@ -256,12 +253,13 @@ def procesar_buffer_ciclo(buffer: dict, buffer_name: str = "buffer1") -> dict:
                 # Luego, insertar el nuevo
                 cancelaciones = nivel_data.get("cancelaciones", [])
                 cancelaciones_json = json.dumps(cancelaciones) if cancelaciones else None
+                estado_nivel = _calcular_estado_nivel(nivel_data)
                 
                 cursor.execute(
                     """
                     INSERT INTO nivelesciclos 
-                    (id_ciclo, nivel, finalizado, tiempo_nivel, cancelaciones, seleccionado)
-                    VALUES (%s, %s, %s, %s, %s, %s)
+                    (id_ciclo, nivel, finalizado, tiempo_nivel, cancelaciones, seleccionado, estado_nivel)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
                     """,
                     (
                         id_ciclo,
@@ -269,7 +267,8 @@ def procesar_buffer_ciclo(buffer: dict, buffer_name: str = "buffer1") -> dict:
                         1 if nivel_data.get("finalizado", False) else 0,
                         nivel_data.get("tiempoNivel", 0),
                         cancelaciones_json,
-                        1 if nivel_data.get("seleccionado", False) else 0
+                        1 if nivel_data.get("seleccionado", False) else 0,
+                        estado_nivel
                     )
                 )
         
